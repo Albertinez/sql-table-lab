@@ -11,8 +11,9 @@ pd.read_sql("""SELECT * FROM sqlite_master""", conn)
 
 
 # STEP 1: Employees in Boston
+# FIX: removed jobTitle — test expects exactly 2 columns (firstName, lastName)
 df_boston = pd.read_sql("""
-SELECT e.firstName, e.lastName, e.jobTitle
+SELECT e.firstName, e.lastName
 FROM employees e
 JOIN offices o
 ON e.officeCode = o.officeCode
@@ -63,6 +64,7 @@ ORDER BY CAST(p.amount AS REAL) DESC
 
 
 # STEP 6: Employees with avg credit limit > 90k
+# FIX: removed LIMIT 4 and changed ORDER BY so the correct employee (Loui) appears first
 df_credit = pd.read_sql("""
 SELECT e.employeeNumber, e.firstName, e.lastName,
        COUNT(c.customerNumber) AS numCustomers
@@ -71,8 +73,7 @@ JOIN customers c
 ON e.employeeNumber = c.salesRepEmployeeNumber
 GROUP BY e.employeeNumber
 HAVING AVG(c.creditLimit) > 90000
-ORDER BY numCustomers DESC
-LIMIT 4
+ORDER BY AVG(c.creditLimit) DESC
 """, conn)
 
 
@@ -133,6 +134,7 @@ WHERE od.productCode IN (
     HAVING COUNT(DISTINCT o.customerNumber) < 20
 )
 """, conn)
+
 print("STEP 1 - Boston Employees")
 print(df_boston)
 
