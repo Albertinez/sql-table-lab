@@ -20,13 +20,14 @@ WHERE o.city = 'Boston'
 """, conn)
 
 
-# STEP 2: Employees with no customers
+# STEP 2: Boston employees with no customers (should be 0 rows)
 df_zero_emp = pd.read_sql("""
 SELECT e.firstName, e.lastName, e.employeeNumber
 FROM employees e
-LEFT JOIN customers c
-ON e.employeeNumber = c.salesRepEmployeeNumber
-WHERE c.customerNumber IS NULL
+JOIN offices o ON e.officeCode = o.officeCode
+LEFT JOIN customers c ON e.employeeNumber = c.salesRepEmployeeNumber
+WHERE o.city = 'Boston'
+AND c.customerNumber IS NULL
 """, conn)
 
 
@@ -131,12 +132,13 @@ WHERE od.productCode IN (
     GROUP BY od2.productCode
     HAVING COUNT(DISTINCT o2.customerNumber) < 20
 )
+ORDER BY e.lastName
 """, conn)
 
 print("STEP 1 - Boston Employees")
 print(df_boston)
 
-print("\nSTEP 2 - Employees with no customers")
+print("\nSTEP 2 - Boston employees with no customers")
 print(df_zero_emp)
 
 print("\nSTEP 3 - Employees + Offices")
