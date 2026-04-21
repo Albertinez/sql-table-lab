@@ -15,18 +15,21 @@ df_boston = pd.read_sql("""
 SELECT e.firstName, e.lastName
 FROM employees e
 JOIN offices o
-ON e.officeCode = o.officeCode
+  ON e.officeCode = o.officeCode
 WHERE o.city = 'Boston'
 """, conn)
 
 
-# STEP 2: Employees with no customers
+# STEP 2: Offices with zero employees
+# GROUP BY both selected columns to avoid relying on non-standard GROUP BY behavior
 df_zero_emp = pd.read_sql("""
-SELECT e.firstName, e.lastName, e.employeeNumber
-FROM employees e
-LEFT JOIN customers c
-ON e.employeeNumber = c.salesRepEmployeeNumber
-WHERE c.customerNumber IS NULL
+SELECT o.officeCode, o.city
+FROM offices o
+LEFT JOIN employees e
+  ON o.officeCode = e.officeCode
+GROUP BY o.officeCode, o.city
+HAVING COUNT(e.employeeNumber) = 0
+ORDER BY o.officeCode
 """, conn)
 
 
@@ -35,56 +38,58 @@ df_employee = pd.read_sql("""
 SELECT e.firstName, e.lastName, o.city, o.state
 FROM employees e
 LEFT JOIN offices o
-ON e.officeCode = o.officeCode
+  ON e.officeCode = o.officeCode
 ORDER BY e.firstName, e.lastName
 """, conn)
 
 
 # STEP 4: Customers with no orders
 df_contacts = pd.read_sql("""
-SELECT c.contactFirstName, c.contactLastName,
-       c.phone, c.salesRepEmployeeNumber
+SELECT c.contactFirstName, c.contactLastName, c.phone, c.salesRepEmployeeNumber
 FROM customers c
 LEFT JOIN orders o
-ON c.customerNumber = o.customerNumber
+  ON c.customerNumber = o.customerNumber
 WHERE o.orderNumber IS NULL
-ORDER BY c.contactLastName, c.contactFirstName
+ORDER BY c.contactFirstName, c.contactLastName
 """, conn)
 
 
 # STEP 5: Payments sorted by correct amount
+# Ensure numeric sort for amount and add deterministic tie-breaker
 df_payment = pd.read_sql("""
 SELECT c.contactFirstName, c.contactLastName, p.amount, p.paymentDate
 FROM customers c
 JOIN payments p
-ON c.customerNumber = p.customerNumber
-ORDER BY CAST(p.amount AS REAL) DESC
+  ON c.customerNumber = p.customerNumber
+ORDER BY CAST(p.amount AS REAL) DESC, p.paymentDate DESC
 """, conn)
 
 
 # STEP 6: Employees with avg credit limit > 90k
+# Order by AVG(creditLimit) DESC as test expects top averages first
 df_credit = pd.read_sql("""
 SELECT e.employeeNumber, e.firstName, e.lastName,
        COUNT(c.customerNumber) AS numCustomers
 FROM employees e
 JOIN customers c
-ON e.employeeNumber = c.salesRepEmployeeNumber
+  ON e.employeeNumber = c.salesRepEmployeeNumber
 GROUP BY e.employeeNumber
-HAVING AVG(c.creditLimit) > 90000
-ORDER BY numCustomers DESC
+HAVING AVG(CAST(c.creditLimit AS REAL)) > 90000
+ORDER BY AVG(CAST(c.creditLimit AS REAL)) DESC
 """, conn)
 
 
 # STEP 7: Product sales
+# Add tie-breaker ordering to make results deterministic
 df_product_sold = pd.read_sql("""
 SELECT p.productName,
        COUNT(od.orderNumber) AS numorders,
        SUM(od.quantityOrdered) AS totalunits
 FROM products p
 JOIN orderdetails od
-ON p.productCode = od.productCode
-GROUP BY p.productCode
-ORDER BY totalunits DESC
+  ON p.productCode = od.productCode
+GROUP BY p.productCode, p.productName
+ORDER BY totalunits DESC, numorders DESC
 """, conn)
 
 
@@ -94,28 +99,31 @@ SELECT p.productName, p.productCode,
        COUNT(DISTINCT o.customerNumber) AS numpurchasers
 FROM products p
 JOIN orderdetails od
-ON p.productCode = od.productCode
+  ON p.productCode = od.productCode
 JOIN orders o
-ON od.orderNumber = o.orderNumber
-GROUP BY p.productCode
-ORDER BY numpurchasers DESC
+  ON od.orderNumber = o.orderNumber
+GROUP BY p.productCode, p.productName
+ORDER BY numpurchasers DESC, p.productName
 """, conn)
 
 
 # STEP 9: Customers per office
+# Group by selected office columns and order by count descending for clarity
 df_customers = pd.read_sql("""
 SELECT o.officeCode, o.city,
        COUNT(c.customerNumber) AS n_customers
 FROM offices o
 LEFT JOIN employees e
-ON o.officeCode = e.officeCode
+  ON o.officeCode = e.officeCode
 LEFT JOIN customers c
-ON e.employeeNumber = c.salesRepEmployeeNumber
-GROUP BY o.officeCode
+  ON e.employeeNumber = c.salesRepEmployeeNumber
+GROUP BY o.officeCode, o.city
+ORDER BY n_customers DESC, o.officeCode
 """, conn)
 
 
 # STEP 10: Employees who sold low-performing products (<20 customers)
+# Add deterministic ordering
 df_under_20 = pd.read_sql("""
 SELECT DISTINCT e.employeeNumber, e.firstName, e.lastName,
        o.city, o.officeCode
@@ -131,12 +139,13 @@ WHERE od.productCode IN (
     GROUP BY od2.productCode
     HAVING COUNT(DISTINCT o2.customerNumber) < 20
 )
+ORDER BY e.lastName, e.firstName
 """, conn)
 
 print("STEP 1 - Boston Employees")
 print(df_boston)
 
-print("\nSTEP 2 - Employees with no customers")
+print("\nSTEP 2 - Offices with zero employees")
 print(df_zero_emp)
 
 print("\nSTEP 3 - Employees + Offices")
