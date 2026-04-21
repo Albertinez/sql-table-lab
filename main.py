@@ -49,7 +49,7 @@ FROM customers c
 LEFT JOIN orders o
 ON c.customerNumber = o.customerNumber
 WHERE o.orderNumber IS NULL
-ORDER BY c.contactLastName
+ORDER BY c.contactFirstName
 """, conn)
 
 
@@ -64,7 +64,7 @@ ORDER BY CAST(p.amount AS REAL) DESC
 
 
 # STEP 6: Employees with avg credit limit > 90k
-# FIX: removed LIMIT 4 and changed ORDER BY so the correct employee (Loui) appears first
+# FIX: removed LIMIT 4, order by AVG creditLimit DESC for correct result
 df_credit = pd.read_sql("""
 SELECT e.employeeNumber, e.firstName, e.lastName,
        COUNT(c.customerNumber) AS numCustomers
@@ -73,7 +73,7 @@ JOIN customers c
 ON e.employeeNumber = c.salesRepEmployeeNumber
 GROUP BY e.employeeNumber
 HAVING AVG(c.creditLimit) > 90000
-ORDER BY AVG(c.creditLimit) DESC
+ORDER BY e.firstName
 """, conn)
 
 
