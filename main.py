@@ -1,146 +1,160 @@
 # STEP 0
-
-# SQL Library and Pandas Library
 import sqlite3
 import pandas as pd
 
 # Connect to the database
 conn = sqlite3.connect('data.sqlite')
 
-pd.read_sql("""SELECT * FROM sqlite_master""", conn)
+pd.read_sql("SELECT * FROM sqlite_master", conn)
 
 
 # STEP 1: Employees in Boston
-df_boston = pd.read_sql("""
-SELECT e.firstName, e.lastName
-FROM employees e
-JOIN offices o
-  ON e.officeCode = o.officeCode
-WHERE o.city = 'Boston'
-""", conn)
+sql = (
+    "SELECT TRIM(e.firstName) AS firstName, "
+    "TRIM(e.lastName) AS lastName\n"
+    "FROM employees e\n"
+    "JOIN offices o\n"
+    "  ON e.officeCode = o.officeCode\n"
+    "WHERE o.city = 'Boston'\n"
+    "ORDER BY firstName, lastName"
+)
+df_boston = pd.read_sql(sql, conn)
 
 
 # STEP 2: Offices with zero employees
-# GROUP BY both selected columns to avoid relying on non-standard GROUP BY behavior
-df_zero_emp = pd.read_sql("""
-SELECT o.officeCode, o.city
-FROM offices o
-LEFT JOIN employees e
-  ON o.officeCode = e.officeCode
-GROUP BY o.officeCode, o.city
-HAVING COUNT(e.employeeNumber) = 0
-ORDER BY o.officeCode
-""", conn)
+sql = (
+    "SELECT o.officeCode, o.city\n"
+    "FROM offices o\n"
+    "LEFT JOIN employees e\n"
+    "  ON o.officeCode = e.officeCode\n"
+    "GROUP BY o.officeCode, o.city\n"
+    "HAVING COUNT(e.employeeNumber) = 0\n"
+    "ORDER BY o.officeCode"
+)
+df_zero_emp = pd.read_sql(sql, conn)
 
 
 # STEP 3: All employees + office info
-df_employee = pd.read_sql("""
-SELECT e.firstName, e.lastName, o.city, o.state
-FROM employees e
-LEFT JOIN offices o
-  ON e.officeCode = o.officeCode
-ORDER BY e.firstName, e.lastName
-""", conn)
+sql = (
+    "SELECT TRIM(e.firstName) AS firstName, "
+    "TRIM(e.lastName) AS lastName, o.city, o.state\n"
+    "FROM employees e\n"
+    "LEFT JOIN offices o\n"
+    "  ON e.officeCode = o.officeCode\n"
+    "ORDER BY firstName, lastName"
+)
+df_employee = pd.read_sql(sql, conn)
 
 
 # STEP 4: Customers with no orders
-df_contacts = pd.read_sql("""
-SELECT c.contactFirstName, c.contactLastName, c.phone, c.salesRepEmployeeNumber
-FROM customers c
-LEFT JOIN orders o
-  ON c.customerNumber = o.customerNumber
-WHERE o.orderNumber IS NULL
-ORDER BY c.contactFirstName, c.contactLastName
-""", conn)
+sql = (
+    "SELECT TRIM(c.contactFirstName) AS contactFirstName, "
+    "TRIM(c.contactLastName) AS contactLastName,\n"
+    "       c.phone, c.salesRepEmployeeNumber\n"
+    "FROM customers c\n"
+    "LEFT JOIN orders o\n"
+    "  ON c.customerNumber = o.customerNumber\n"
+    "WHERE o.orderNumber IS NULL\n"
+    "ORDER BY contactFirstName, contactLastName"
+)
+df_contacts = pd.read_sql(sql, conn)
 
 
 # STEP 5: Payments sorted by correct amount
-# Ensure numeric sort for amount and add deterministic tie-breaker
-df_payment = pd.read_sql("""
-SELECT c.contactFirstName, c.contactLastName, p.amount, p.paymentDate
-FROM customers c
-JOIN payments p
-  ON c.customerNumber = p.customerNumber
-ORDER BY CAST(p.amount AS REAL) DESC, p.paymentDate DESC
-""", conn)
+sql = (
+    "SELECT TRIM(c.contactFirstName) AS contactFirstName, "
+    "TRIM(c.contactLastName) AS contactLastName,\n"
+    "       p.amount, p.paymentDate\n"
+    "FROM customers c\n"
+    "JOIN payments p\n"
+    "  ON c.customerNumber = p.customerNumber\n"
+    "ORDER BY CAST(p.amount AS REAL) DESC,\n"
+    "         p.paymentDate DESC"
+)
+df_payment = pd.read_sql(sql, conn)
 
 
 # STEP 6: Employees with avg credit limit > 90k
-# Order by AVG(creditLimit) DESC as test expects top averages first
-df_credit = pd.read_sql("""
-SELECT e.employeeNumber, e.firstName, e.lastName,
-       COUNT(c.customerNumber) AS numCustomers
-FROM employees e
-JOIN customers c
-  ON e.employeeNumber = c.salesRepEmployeeNumber
-GROUP BY e.employeeNumber
-HAVING AVG(CAST(c.creditLimit AS REAL)) > 90000
-ORDER BY AVG(CAST(c.creditLimit AS REAL)) DESC
-""", conn)
+sql = (
+    "SELECT e.employeeNumber, TRIM(e.firstName) AS firstName, "
+    "TRIM(e.lastName) AS lastName,\n"
+    "       COUNT(c.customerNumber) AS numCustomers\n"
+    "FROM employees e\n"
+    "JOIN customers c\n"
+    "  ON e.employeeNumber = c.salesRepEmployeeNumber\n"
+    "GROUP BY e.employeeNumber\n"
+    "HAVING AVG(CAST(c.creditLimit AS REAL)) > 90000\n"
+    "ORDER BY AVG(CAST(c.creditLimit AS REAL)) DESC,\n"
+    "         e.employeeNumber"
+)
+df_credit = pd.read_sql(sql, conn)
 
 
 # STEP 7: Product sales
-# Add tie-breaker ordering to make results deterministic
-df_product_sold = pd.read_sql("""
-SELECT p.productName,
-       COUNT(od.orderNumber) AS numorders,
-       SUM(od.quantityOrdered) AS totalunits
-FROM products p
-JOIN orderdetails od
-  ON p.productCode = od.productCode
-GROUP BY p.productCode, p.productName
-ORDER BY totalunits DESC, numorders DESC
-""", conn)
+sql = (
+    "SELECT p.productName,\n"
+    "       COUNT(DISTINCT od.orderNumber) AS numorders,\n"
+    "       SUM(od.quantityOrdered) AS totalunits\n"
+    "FROM products p\n"
+    "JOIN orderdetails od\n"
+    "  ON p.productCode = od.productCode\n"
+    "GROUP BY p.productCode, p.productName\n"
+    "ORDER BY totalunits DESC, numorders DESC,\n"
+    "         p.productName"
+)
+df_product_sold = pd.read_sql(sql, conn)
 
 
 # STEP 8: Number of customers per product
-df_total_customers = pd.read_sql("""
-SELECT p.productName, p.productCode,
-       COUNT(DISTINCT o.customerNumber) AS numpurchasers
-FROM products p
-JOIN orderdetails od
-  ON p.productCode = od.productCode
-JOIN orders o
-  ON od.orderNumber = o.orderNumber
-GROUP BY p.productCode, p.productName
-ORDER BY numpurchasers DESC, p.productName
-""", conn)
+sql = (
+    "SELECT p.productName, p.productCode,\n"
+    "       COUNT(DISTINCT o.customerNumber) AS numpurchasers\n"
+    "FROM products p\n"
+    "JOIN orderdetails od\n"
+    "  ON p.productCode = od.productCode\n"
+    "JOIN orders o\n"
+    "  ON od.orderNumber = o.orderNumber\n"
+    "GROUP BY p.productCode, p.productName\n"
+    "ORDER BY numpurchasers DESC, p.productName"
+)
+df_total_customers = pd.read_sql(sql, conn)
 
 
 # STEP 9: Customers per office
-# Group by selected office columns and order by count descending for clarity
-df_customers = pd.read_sql("""
-SELECT o.officeCode, o.city,
-       COUNT(c.customerNumber) AS n_customers
-FROM offices o
-LEFT JOIN employees e
-  ON o.officeCode = e.officeCode
-LEFT JOIN customers c
-  ON e.employeeNumber = c.salesRepEmployeeNumber
-GROUP BY o.officeCode, o.city
-ORDER BY n_customers DESC, o.officeCode
-""", conn)
+sql = (
+    "SELECT o.officeCode, o.city,\n"
+    "       COUNT(DISTINCT c.customerNumber) AS n_customers\n"
+    "FROM offices o\n"
+    "LEFT JOIN employees e\n"
+    "  ON o.officeCode = e.officeCode\n"
+    "LEFT JOIN customers c\n"
+    "  ON e.employeeNumber = c.salesRepEmployeeNumber\n"
+    "GROUP BY o.officeCode, o.city\n"
+    "ORDER BY n_customers DESC, o.officeCode"
+)
+df_customers = pd.read_sql(sql, conn)
 
 
 # STEP 10: Employees who sold low-performing products (<20 customers)
-# Add deterministic ordering
-df_under_20 = pd.read_sql("""
-SELECT DISTINCT e.employeeNumber, e.firstName, e.lastName,
-       o.city, o.officeCode
-FROM employees e
-JOIN offices o ON e.officeCode = o.officeCode
-JOIN customers c ON e.employeeNumber = c.salesRepEmployeeNumber
-JOIN orders ord ON c.customerNumber = ord.customerNumber
-JOIN orderdetails od ON ord.orderNumber = od.orderNumber
-WHERE od.productCode IN (
-    SELECT od2.productCode
-    FROM orderdetails od2
-    JOIN orders o2 ON od2.orderNumber = o2.orderNumber
-    GROUP BY od2.productCode
-    HAVING COUNT(DISTINCT o2.customerNumber) < 20
+sql = (
+    "SELECT DISTINCT e.employeeNumber, "
+    "TRIM(e.firstName) AS firstName, TRIM(e.lastName) AS lastName,\n"
+    "       o.city, o.officeCode\n"
+    "FROM employees e\n"
+    "JOIN offices o ON e.officeCode = o.officeCode\n"
+    "JOIN customers c ON e.employeeNumber = c.salesRepEmployeeNumber\n"
+    "JOIN orders ord ON c.customerNumber = ord.customerNumber\n"
+    "JOIN orderdetails od ON ord.orderNumber = od.orderNumber\n"
+    "WHERE od.productCode IN (\n"
+    "    SELECT od2.productCode\n"
+    "    FROM orderdetails od2\n"
+    "    JOIN orders o2 ON od2.orderNumber = o2.orderNumber\n"
+    "    GROUP BY od2.productCode\n"
+    "    HAVING COUNT(DISTINCT o2.customerNumber) < 20\n"
+    ")\n"
+    "ORDER BY lastName, firstName"
 )
-ORDER BY e.lastName, e.firstName
-""", conn)
+df_under_20 = pd.read_sql(sql, conn)
 
 print("STEP 1 - Boston Employees")
 print(df_boston)
