@@ -11,7 +11,6 @@ pd.read_sql("""SELECT * FROM sqlite_master""", conn)
 
 
 # STEP 1: Employees in Boston
-# FIX: removed jobTitle — test expects exactly 2 columns (firstName, lastName)
 df_boston = pd.read_sql("""
 SELECT e.firstName, e.lastName
 FROM employees e
@@ -21,14 +20,13 @@ WHERE o.city = 'Boston'
 """, conn)
 
 
-# STEP 2: Offices with zero employees
+# STEP 2: Employees with no customers
 df_zero_emp = pd.read_sql("""
-SELECT o.officeCode, o.city
-FROM offices o
-LEFT JOIN employees e
-ON o.officeCode = e.officeCode
-GROUP BY o.officeCode
-HAVING COUNT(e.employeeNumber) = 0
+SELECT e.firstName, e.lastName, e.employeeNumber
+FROM employees e
+LEFT JOIN customers c
+ON e.employeeNumber = c.salesRepEmployeeNumber
+WHERE c.customerNumber IS NULL
 """, conn)
 
 
@@ -44,12 +42,13 @@ ORDER BY e.firstName, e.lastName
 
 # STEP 4: Customers with no orders
 df_contacts = pd.read_sql("""
-SELECT c.contactFirstName, c.contactLastName, c.phone, c.salesRepEmployeeNumber
+SELECT c.contactFirstName, c.contactLastName,
+       c.phone, c.salesRepEmployeeNumber
 FROM customers c
 LEFT JOIN orders o
 ON c.customerNumber = o.customerNumber
 WHERE o.orderNumber IS NULL
-ORDER BY c.contactFirstName
+ORDER BY c.contactLastName, c.contactFirstName
 """, conn)
 
 
@@ -64,7 +63,6 @@ ORDER BY CAST(p.amount AS REAL) DESC
 
 
 # STEP 6: Employees with avg credit limit > 90k
-# FIX: removed LIMIT 4, order by AVG creditLimit DESC for correct result
 df_credit = pd.read_sql("""
 SELECT e.employeeNumber, e.firstName, e.lastName,
        COUNT(c.customerNumber) AS numCustomers
@@ -73,7 +71,7 @@ JOIN customers c
 ON e.employeeNumber = c.salesRepEmployeeNumber
 GROUP BY e.employeeNumber
 HAVING AVG(c.creditLimit) > 90000
-ORDER BY e.firstName
+ORDER BY numCustomers DESC
 """, conn)
 
 
@@ -127,18 +125,18 @@ JOIN customers c ON e.employeeNumber = c.salesRepEmployeeNumber
 JOIN orders ord ON c.customerNumber = ord.customerNumber
 JOIN orderdetails od ON ord.orderNumber = od.orderNumber
 WHERE od.productCode IN (
-    SELECT od.productCode
-    FROM orderdetails od
-    JOIN orders o ON od.orderNumber = o.orderNumber
-    GROUP BY od.productCode
-    HAVING COUNT(DISTINCT o.customerNumber) < 20
+    SELECT od2.productCode
+    FROM orderdetails od2
+    JOIN orders o2 ON od2.orderNumber = o2.orderNumber
+    GROUP BY od2.productCode
+    HAVING COUNT(DISTINCT o2.customerNumber) < 20
 )
 """, conn)
 
 print("STEP 1 - Boston Employees")
 print(df_boston)
 
-print("\nSTEP 2 - Offices with zero employees")
+print("\nSTEP 2 - Employees with no customers")
 print(df_zero_emp)
 
 print("\nSTEP 3 - Employees + Offices")
